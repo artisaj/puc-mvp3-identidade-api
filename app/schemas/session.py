@@ -5,6 +5,13 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class TokenRead(BaseModel):
+    """Resposta pública após emitir ou renovar um access token."""
+
+    access_token: str
+    token_type: str = "bearer"
+
+
 class SessionRead(BaseModel):
     """Dados públicos de uma sessão, sem o refresh token nem seu hash."""
 

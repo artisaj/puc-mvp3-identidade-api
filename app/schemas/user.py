@@ -25,6 +25,13 @@ class UserCreate(UserAddress):
     password: str = Field(min_length=8, max_length=128)
 
 
+class UserLogin(BaseModel):
+    """Credenciais aceitas para iniciar uma sessão."""
+
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
 class UserUpdate(UserAddress):
     """Dados que poderão ser alterados no perfil."""
 
