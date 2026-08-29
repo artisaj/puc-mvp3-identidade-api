@@ -1,6 +1,7 @@
 """Testes focados dos fluxos de autenticação, perfil e sessões."""
 
 from collections.abc import Generator
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
+from app.core.security import create_access_token
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -97,6 +99,32 @@ def test_current_user_profile_requires_authentication_and_can_be_updated(client:
     assert updated.status_code == 200
     assert updated.json()["name"] == "Ana Costa"
     assert updated.json()["city"] == "São Paulo"
+
+
+def test_protected_routes_reject_missing_invalid_and_expired_access_tokens(client: TestClient) -> None:
+    """Perfil e sessões recusam credenciais ausentes, inválidas ou expiradas."""
+    for route in ("/users/me", "/sessions"):
+        assert client.get(route).status_code == 401
+        invalid = client.get(route, headers=bearer("not-a-jwt"))
+        assert invalid.status_code == 401
+        assert invalid.headers["www-authenticate"] == "Bearer"
+
+    register(client)
+    expired_token = create_access_token("unknown-user", expires_delta=timedelta(seconds=-1))
+    for route in ("/users/me", "/sessions"):
+        assert client.get(route, headers=bearer(expired_token)).status_code == 401
+
+
+def test_revoked_session_cannot_refresh_and_is_hidden_from_active_sessions(client: TestClient) -> None:
+    """A revogação pelo endpoint de sessões invalida o refresh token associado."""
+    register(client)
+    access_token = login(client)
+    session_id = client.get("/sessions", headers=bearer(access_token)).json()[0]["id"]
+
+    revoked = client.delete(f"/sessions/{session_id}", headers=bearer(access_token))
+    assert revoked.status_code == 204
+    assert client.get("/sessions", headers=bearer(access_token)).json() == []
+    assert client.post("/auth/refresh").status_code == 401
 
 
 def test_user_cannot_revoke_another_users_session(client: TestClient) -> None:

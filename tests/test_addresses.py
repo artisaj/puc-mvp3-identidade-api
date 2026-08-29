@@ -92,6 +92,31 @@ def test_lookup_returns_service_unavailable_for_httpx_failure(client: TestClient
     assert response.json()["detail"] == "Address lookup service is unavailable."
 
 
+@pytest.mark.parametrize(
+    "provider_response",
+    [
+        httpx.Response(500, request=httpx.Request("GET", "https://viacep.com.br/ws/01001000/json/")),
+        httpx.Response(
+            200,
+            content=b"not-json",
+            request=httpx.Request("GET", "https://viacep.com.br/ws/01001000/json/"),
+        ),
+    ],
+)
+def test_lookup_returns_service_unavailable_for_bad_provider_response(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    provider_response: httpx.Response,
+) -> None:
+    """Erros HTTP e conteúdo inválido do provedor não vazam ao consumidor."""
+    monkeypatch.setattr(httpx.AsyncClient, "get", AsyncMock(return_value=provider_response))
+
+    response = client.get("/addresses/lookup/01001000")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Address lookup service is unavailable."
+
+
 def test_lookup_limits_requests_per_ip(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """A décima primeira consulta na janela é bloqueada para o mesmo IP."""
     monkeypatch.setattr(httpx.AsyncClient, "get", AsyncMock(return_value=viacep_response({})))
