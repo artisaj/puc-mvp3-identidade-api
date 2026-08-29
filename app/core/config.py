@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = ""
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+    password_reset_token_expire_minutes: int = 15
     cors_origins: str = "http://localhost:5173"
     viacep_base_url: str = "https://viacep.com.br/ws"
     viacep_timeout_seconds: float = 3.0

@@ -8,7 +8,9 @@ from app.core.security import create_access_token, verify_password
 from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.session import TokenRead
+from app.schemas.password_reset import ForgotPasswordRequest, ForgotPasswordResponse, ResetPasswordRequest
 from app.schemas.user import UserCreate, UserLogin, UserRead
+from app.services.password_reset import issue_development_reset_token, reset_password
 from app.services.sessions import (
     create_session,
     get_valid_session_by_refresh_token,
@@ -18,6 +20,28 @@ from app.services.sessions import (
 from app.services.users import create_user, get_user_by_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    response_model_exclude_none=True,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)) -> ForgotPasswordResponse:
+    """Aceita sempre a solicitação para não revelar a existência de uma conta."""
+    reset_token = issue_development_reset_token(get_user_by_email(db, payload.email))
+    return ForgotPasswordResponse(reset_token=reset_token)
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password_endpoint(payload: ResetPasswordRequest, db: Session = Depends(get_db)) -> Response:
+    """Redefine a senha com token de propósito único e revoga as sessões anteriores."""
+    try:
+        reset_password(db, payload.token, payload.new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)

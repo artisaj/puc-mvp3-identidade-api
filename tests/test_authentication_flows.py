@@ -70,6 +70,54 @@ def test_login_creates_session_and_rejects_invalid_credentials(client: TestClien
     assert len(sessions.json()) == 1
 
 
+def test_forgot_password_is_generic_and_returns_token_only_for_known_development_user(client: TestClient) -> None:
+    """A rota não permite enumerar contas, mas oferece o token no fluxo local."""
+    register(client)
+
+    known = client.post("/auth/forgot-password", json={"email": "ana@example.com"})
+    unknown = client.post("/auth/forgot-password", json={"email": "desconhecido@example.com"})
+
+    assert known.status_code == unknown.status_code == 202
+    assert known.json()["accepted"] is unknown.json()["accepted"] is True
+    assert isinstance(known.json()["reset_token"], str)
+    assert unknown.json() == {"accepted": True}
+
+
+def test_forgot_password_does_not_return_token_outside_development(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mesmo para conta existente, produção mantém a resposta sem dados sensíveis."""
+    register(client)
+    monkeypatch.setenv("APP_ENV", "production")
+    get_settings.cache_clear()
+
+    response = client.post("/auth/forgot-password", json={"email": "ana@example.com"})
+
+    assert response.status_code == 202
+    assert response.json() == {"accepted": True}
+
+
+def test_reset_password_changes_credentials_invalidates_sessions_and_consumes_token(client: TestClient) -> None:
+    """Uma redefinição válida encerra dispositivos conectados e não pode ser repetida."""
+    register(client)
+    old_access_token = login(client)
+    reset_token = client.post("/auth/forgot-password", json={"email": "ana@example.com"}).json()["reset_token"]
+
+    reset = client.post("/auth/reset-password", json={"token": reset_token, "new_password": "Nova-senha-456"})
+    assert reset.status_code == 204
+    assert client.post("/auth/refresh").status_code == 401
+    assert client.get("/sessions", headers=bearer(old_access_token)).json() == []
+    assert client.post("/auth/login", json={"email": "ana@example.com", "password": "Senha-forte-123"}).status_code == 401
+    assert client.post("/auth/login", json={"email": "ana@example.com", "password": "Nova-senha-456"}).status_code == 200
+    assert client.post("/auth/reset-password", json={"token": reset_token, "new_password": "Outra-senha-789"}).status_code == 401
+
+
+def test_reset_password_rejects_access_token(client: TestClient) -> None:
+    """Um access token assinado não deve funcionar fora de seu propósito."""
+    register(client)
+    access_token = login(client)
+    response = client.post("/auth/reset-password", json={"token": access_token, "new_password": "Nova-senha-456"})
+    assert response.status_code == 401
+
+
 def test_refresh_rotates_token_and_logout_revokes_session(client: TestClient) -> None:
     register(client)
     login(client)

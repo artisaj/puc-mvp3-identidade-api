@@ -39,15 +39,59 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
 
 def decode_access_token(token: str) -> str:
     """Valida um JWT e retorna o identificador do usuário autenticado."""
-    settings = get_settings()
-    if not settings.jwt_secret_key:
-        raise RuntimeError("JWT_SECRET_KEY must be configured")
-
-    payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[ALGORITHM])
+    payload = decode_token(token)
+    if payload.get("purpose") is not None:
+        raise jwt.InvalidTokenError("Token purpose is invalid")
     subject = payload.get("sub")
     if not isinstance(subject, str) or not subject:
         raise jwt.InvalidTokenError("Token subject is invalid")
     return subject
+
+
+def password_hash_fingerprint(password_hash: str) -> str:
+    """Cria uma impressão do hash atual sem incluir credenciais no JWT."""
+    return sha256(password_hash.encode("utf-8")).hexdigest()
+
+
+def create_password_reset_token(subject: str, password_hash: str) -> str:
+    """Cria um JWT curto, restrito à redefinição da senha atual do usuário."""
+    settings = get_settings()
+    if not settings.jwt_secret_key:
+        raise RuntimeError("JWT_SECRET_KEY must be configured")
+
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.password_reset_token_expire_minutes)
+    payload = {
+        "sub": subject,
+        "purpose": "password_reset",
+        "password_fingerprint": password_hash_fingerprint(password_hash),
+        "exp": expires_at,
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=ALGORITHM)
+
+
+def decode_password_reset_token(token: str) -> tuple[str, str]:
+    """Valida o propósito de um JWT de reset e retorna sujeito e impressão."""
+    payload = decode_token(token)
+    subject = payload.get("sub")
+    fingerprint = payload.get("password_fingerprint")
+    if (
+        payload.get("purpose") != "password_reset"
+        or not isinstance(subject, str)
+        or not subject
+        or not isinstance(fingerprint, str)
+        or not fingerprint
+    ):
+        raise jwt.InvalidTokenError("Password reset token is invalid")
+    return subject, fingerprint
+
+
+def decode_token(token: str) -> dict[str, object]:
+    """Valida assinatura e expiração de um JWT e retorna suas claims."""
+    settings = get_settings()
+    if not settings.jwt_secret_key:
+        raise RuntimeError("JWT_SECRET_KEY must be configured")
+
+    return jwt.decode(token, settings.jwt_secret_key, algorithms=[ALGORITHM])
 
 
 def generate_refresh_token() -> str:

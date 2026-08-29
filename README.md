@@ -73,6 +73,7 @@ seu próprio Dockerfile, sem Compose.
 | `JWT_SECRET_KEY` | Sim | Segredo de assinatura JWT; use valor longo, aleatório e privado. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Não | Validade do access token; padrão `15`. |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | Não | Validade do refresh token; padrão `7`. |
+| `PASSWORD_RESET_TOKEN_EXPIRE_MINUTES` | Não | Validade do JWT de redefinição; padrão `15`. |
 | `CORS_ORIGINS` | Não | Origens separadas por vírgula; padrão `http://localhost:5173`. |
 | `VIACEP_BASE_URL` | Não | Base do ViaCEP; padrão `https://viacep.com.br/ws`. |
 | `VIACEP_TIMEOUT_SECONDS` | Não | Timeout externo em segundos; padrão `3`. |
@@ -92,6 +93,8 @@ Respostas e erros usam JSON; falhas são descritas em `detail`.
 | `POST /auth/login` | Não | Recebe `email` e `password`; retorna `access_token` e cria cookie `refresh_token`. | `200`, `401`, `422` |
 | `POST /auth/refresh` | Cookie de refresh | Rotaciona o cookie e retorna novo `access_token`. | `200`, `401` |
 | `POST /auth/logout` | Cookie de refresh | Revoga a sessão atual e remove o cookie. | `204` |
+| `POST /auth/forgot-password` | Não | Aceita `email` sem confirmar a existência da conta. Só em desenvolvimento retorna `reset_token` temporário para uma conta ativa. | `202`, `422` |
+| `POST /auth/reset-password` | JWT de reset | Aceita `token` e `new_password`, troca o hash Argon2 e revoga as sessões existentes. | `204`, `401`, `422` |
 | `GET /addresses/lookup/{zip_code}` | Não | Retorna endereço normalizado para CEP de 8 dígitos. | `200`, `400`, `404`, `429`, `503` |
 | `GET /users/me` | Bearer | Retorna o perfil autenticado, sem hash de senha. | `200`, `401` |
 | `PUT /users/me` | Bearer | Atualiza `name` e/ou campos de endereço. | `200`, `401`, `422` |
@@ -103,6 +106,21 @@ O `access_token` é retornado como `{"access_token": "...", "token_type":
 "bearer"}` e deve ser enviado no cabeçalho Bearer. O refresh token nunca é
 incluído no JSON. Uma sessão de outra conta é indistinguível de uma inexistente
 e retorna `404`.
+
+### Recuperação de senha em desenvolvimento
+
+O fluxo sem e-mail existe somente para demonstração local. A solicitação em
+`POST /auth/forgot-password` devolve sempre `{"accepted": true}` quando o
+ambiente não é `development` ou a conta não existe, evitando enumeração de
+e-mails. Em desenvolvimento, apenas para uma conta ativa, o campo
+`reset_token` contém um JWT curto, assinado e com propósito exclusivo
+`password_reset`.
+
+`POST /auth/reset-password` valida assinatura, expiração, propósito e uma
+impressão do hash de senha vigente. A nova senha recebe hash Argon2 e todas as
+sessões de refresh anteriores são revogadas na mesma transação. A impressão faz
+com que o token deixe de ser reutilizável após a primeira redefinição. Nunca
+registre ou exponha esse token fora do ambiente de desenvolvimento.
 
 ## ViaCEP
 
@@ -125,7 +143,9 @@ consulta não estiver disponível.
 Execute toda a suíte com `pytest`. Para executar exatamente no contêiner da API
 sem instalar dependências locais, na raiz desta API use
 `docker build -t identidade-local-api-test .` e
-`docker run --rm --entrypoint pytest identidade-local-api-test`. Os testes
+`docker run --rm -v "${PWD}/tests:/app/tests:ro" --entrypoint pytest identidade-local-api-test`.
+No PowerShell, use `${PWD}\tests` no volume. A imagem de produção não inclui
+os testes. Os testes
 cobrem autenticação, expiração e revogação, acesso não autorizado, isolamento
 de sessões, schemas, segurança e respostas do ViaCEP, incluindo falhas externas.
 

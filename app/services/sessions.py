@@ -64,6 +64,16 @@ def revoke_session(db: Session, session: UserSession) -> None:
         db.commit()
 
 
+def revoke_all_sessions(db: Session, user_id: str) -> None:
+    """Marca todas as sessões ativas de um usuário como revogadas em uma transação."""
+    revoked_at = utc_now()
+    sessions = db.scalars(
+        select(UserSession).where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
+    )
+    for session in sessions:
+        session.revoked_at = revoked_at
+
+
 def list_active_sessions(db: Session, user_id: str) -> list[UserSession]:
     """Lista as sessões não revogadas e ainda válidas de um usuário."""
     sessions = list(

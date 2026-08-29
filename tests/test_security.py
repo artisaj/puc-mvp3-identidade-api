@@ -8,7 +8,9 @@ import pytest
 from app.core.config import get_settings
 from app.core.security import (
     create_access_token,
+    create_password_reset_token,
     decode_access_token,
+    decode_password_reset_token,
     generate_refresh_token,
     hash_password,
     hash_refresh_token,
@@ -49,6 +51,24 @@ def test_expired_access_token_is_rejected(configured_jwt_secret: None) -> None:
 
     with pytest.raises(jwt.ExpiredSignatureError):
         decode_access_token(token)
+
+
+def test_password_reset_token_is_short_lived_and_cannot_be_used_as_access_token(
+    configured_jwt_secret: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O token de redefinição tem propósito próprio e expira conforme configurado."""
+    monkeypatch.setenv("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", "0")
+    get_settings.cache_clear()
+    expired_token = create_password_reset_token("user-id", "argon2-hash")
+    with pytest.raises(jwt.ExpiredSignatureError):
+        decode_password_reset_token(expired_token)
+
+    monkeypatch.setenv("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", "15")
+    get_settings.cache_clear()
+    reset_token = create_password_reset_token("user-id", "argon2-hash")
+    assert decode_password_reset_token(reset_token)[0] == "user-id"
+    with pytest.raises(jwt.InvalidTokenError):
+        decode_access_token(reset_token)
 
 
 def test_refresh_token_is_opaque_and_verified_by_hash() -> None:
