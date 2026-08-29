@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     cors_origins: str = "http://localhost:5173"
     viacep_base_url: str = "https://viacep.com.br/ws"
-    viacep_timeout_seconds: float = 5.0
+    viacep_timeout_seconds: float = 3.0
+    viacep_rate_limit_requests: int = 10
+    viacep_rate_limit_window_seconds: int = 60
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
