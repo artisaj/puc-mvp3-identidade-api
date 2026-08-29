@@ -7,10 +7,12 @@ from app.core.config import get_settings
 from app.core.security import create_access_token, verify_password
 from app.db.models.user import User
 from app.db.session import get_db
+from app.schemas.api_key import ApiKeyLogin
 from app.schemas.session import TokenRead
 from app.schemas.password_reset import ForgotPasswordRequest, ForgotPasswordResponse, ResetPasswordRequest
 from app.schemas.user import UserCreate, UserLogin, UserRead
 from app.services.password_reset import issue_development_reset_token, reset_password
+from app.services.api_keys import authenticate_api_key
 from app.services.sessions import (
     create_session,
     get_valid_session_by_refresh_token,
@@ -80,6 +82,15 @@ def login(payload: UserLogin, request: Request, response: Response, db: Session 
     _, refresh_token = create_session(db, user.id, request.headers.get("user-agent"))
     set_refresh_cookie(response, refresh_token)
     return TokenRead(access_token=create_access_token(user.id))
+
+
+@router.post("/api-key-login", response_model=TokenRead)
+def api_key_login(payload: ApiKeyLogin, db: Session = Depends(get_db)) -> TokenRead:
+    """Troca uma chave de API ativa por um JWT de acesso de curta duração."""
+    key = authenticate_api_key(db, payload.key_id, payload.secret)
+    if key is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key credentials")
+    return TokenRead(access_token=create_access_token(key.user_id))
 
 
 @router.post("/refresh", response_model=TokenRead)

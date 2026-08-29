@@ -15,6 +15,12 @@ token opaco é guardado somente como hash. O refresh é enviado em cookie
 da sessão. A API aplica CORS para a origem configurada e protege perfil e
 sessões com `Authorization: Bearer <access_token>`.
 
+Chaves de API pertencem a uma conta e possuem um identificador público e um
+segredo aleatório. O segredo é mostrado exclusivamente na resposta de criação,
+é persistido apenas como hash e nunca é incluído em listagens ou respostas de
+consulta. A troca de credenciais da chave emite somente um access JWT curto;
+ela não cria sessão nem cookie de refresh.
+
 ```text
 React client ── REST JSON ──> FastAPI ──> SQLite
                                  │
@@ -91,6 +97,7 @@ Respostas e erros usam JSON; falhas são descritas em `detail`.
 | `GET /health` | Não | Estado do serviço. | `200` |
 | `POST /auth/register` | Não | Cria usuário com `name`, `email`, `password` e endereço opcional. | `201`, `409`, `422` |
 | `POST /auth/login` | Não | Recebe `email` e `password`; retorna `access_token` e cria cookie `refresh_token`. | `200`, `401`, `422` |
+| `POST /auth/api-key-login` | Não | Recebe `key_id` e `secret`; retorna access JWT para a conta dona da chave ativa. | `200`, `401`, `422` |
 | `POST /auth/refresh` | Cookie de refresh | Rotaciona o cookie e retorna novo `access_token`. | `200`, `401` |
 | `POST /auth/logout` | Cookie de refresh | Revoga a sessão atual e remove o cookie. | `204` |
 | `POST /auth/forgot-password` | Não | Aceita `email` sem confirmar a existência da conta. Só em desenvolvimento retorna `reset_token` temporário para uma conta ativa. | `202`, `422` |
@@ -101,11 +108,24 @@ Respostas e erros usam JSON; falhas são descritas em `detail`.
 | `GET /sessions` | Bearer | Lista sessões ativas do usuário atual. | `200`, `401` |
 | `GET /sessions/{session_id}` | Bearer | Consulta uma sessão da própria conta. | `200`, `401`, `404` |
 | `DELETE /sessions/{session_id}` | Bearer | Revoga uma sessão da própria conta. | `204`, `401`, `404` |
+| `POST /api-keys` | Bearer | Cria chave com `name`; retorna metadados e `secret` somente nesta resposta. | `201`, `401`, `422` |
+| `GET /api-keys` | Bearer | Lista os metadados das chaves, sem segredo nem hash. | `200`, `401` |
+| `DELETE /api-keys/{key_id}` | Bearer | Revoga uma chave da própria conta. | `204`, `401`, `404` |
 
 O `access_token` é retornado como `{"access_token": "...", "token_type":
 "bearer"}` e deve ser enviado no cabeçalho Bearer. O refresh token nunca é
 incluído no JSON. Uma sessão de outra conta é indistinguível de uma inexistente
 e retorna `404`.
+
+### Chaves de API
+
+Crie uma chave autenticado em `POST /api-keys`, copie imediatamente o campo
+`secret` e armazene-o em um gerenciador de segredos. Use o `public_key_id` e o
+segredo com `POST /auth/api-key-login`, por exemplo
+`{"key_id":"ilk_...", "secret":"..."}`. A resposta é um access token Bearer
+compatível com `GET /users/me`. Não registre, compartilhe ou inclua o segredo
+em código, arquivos `.env` versionados ou logs. Uma chave revogada não pode ser
+reativada nem usada para obter tokens.
 
 ### Recuperação de senha em desenvolvimento
 
