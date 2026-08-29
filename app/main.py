@@ -1,4 +1,6 @@
-"""Ponto de entrada da aplicação FastAPI.
+"""Ponto de entrada da aplicação FastAPI."""
 
-A criação da aplicação será adicionada na etapa 2.1.
-"""
+from fastapi import FastAPI
+
+
+app = FastAPI(title="Identidade Local API")

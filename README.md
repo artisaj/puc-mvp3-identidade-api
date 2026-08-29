@@ -34,9 +34,25 @@ tests/            # testes automatizados
 3. Copie `.env.example` para `.env` e substitua `JWT_SECRET_KEY` por um segredo
    seguro.
 
-As instruções de execução estarão disponíveis após a criação da aplicação no
-próximo conjunto de etapas. A execução em contêiner será documentada junto ao
-`Dockerfile` da API.
+Execute a aplicação localmente com `uvicorn app.main:app --reload`. As rotas e
+as configurações completas serão implementadas nas próximas etapas.
+
+## Docker
+
+Construa a imagem no diretório deste repositório com:
+
+```bash
+docker build -t identidade-local-api .
+```
+
+Crie o arquivo `.env` a partir de `.env.example` e execute a imagem com:
+
+```bash
+docker run --rm --env-file .env -p 8000:8000 -v api_data:/data identidade-local-api
+```
+
+O serviço ficará disponível em `http://localhost:8000`. Para iniciar API e
+interface juntas, consulte a seção Docker do repositório da interface.
 
 ## Variáveis de ambiente
 
